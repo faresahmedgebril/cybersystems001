@@ -6,14 +6,27 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
 
+import javax.print.*;
+import javax.print.attribute.HashPrintRequestAttributeSet;
+import javax.print.attribute.PrintRequestAttributeSet;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+
 public class Hall {
 
     private VBox root;
     private Stage stage;
 
     private double total = 0;
-    private double drinksTotalAmount = 0; // إجمالي المشاريب الحالية في الأوردر
-    private static double dailyTotalIncome = 0; // إجمالي الدخل اليومي (محفوظ على مستوى الجلسة)
+    private double drinksTotalAmount = 0;
+    
+    // متغيرات الدخل الإجمالي والدخل لكل قسم (مشتركة على مستوى السيستم)
+    private static double dailyTotalIncome = 0;
+    private static double dailyDrinksIncome = 0;
+    private static double dailyShishaIncome = 0;
+    private static double dailyFoodIncome = 0;
+
+    private static int orderCounter = 1000; // عداد تلقائي لأرقام الأوردرات
 
     private Label totalLabel;
     private Label drinksTotalLabel;
@@ -33,16 +46,12 @@ public class Hall {
         root.setAlignment(Pos.CENTER);
         root.setStyle("-fx-background-color:#f5f5f5;");
 
-        // ==========================================
-        // 0. الجزء العلوي (Top Header): اسم الشاشة + إجمالي المشاريب + الدخل اليومي ع الشمال
-        // ==========================================
         Label title = new Label("نظام الكاشير - الصالة");
         title.setStyle("-fx-font-size:20px; -fx-text-fill:#8B5E3C; -fx-font-weight: bold;");
 
         currentTableLabel = new Label("الترابيزة: " + selectedTable);
         currentTableLabel.setStyle("-fx-font-size:15px; -fx-text-fill:#d9534f; -fx-font-weight: bold;");
 
-        // إجمالي المشاريب والدخل اليومي (فوق ع الشمال)
         drinksTotalLabel = new Label("إجمالي المشاريب: 0.0 ج");
         drinksTotalLabel.setStyle("-fx-font-size:13px; -fx-text-fill:#333333; -fx-font-weight: bold;");
 
@@ -53,7 +62,6 @@ public class Hall {
         statsBox.setAlignment(Pos.TOP_LEFT);
         statsBox.getChildren().addAll(drinksTotalLabel, dailyIncomeLabel);
 
-        // تنسيق الهيدر بحيث يكون متوزع (العنوان يمين، الإحصائيات شمال)
         HBox headerBox = new HBox();
         headerBox.setAlignment(Pos.CENTER);
         
@@ -61,11 +69,8 @@ public class Hall {
         leftStatsWrapper.setAlignment(Pos.CENTER_LEFT);
         HBox.setHgrow(leftStatsWrapper, Priority.ALWAYS);
 
-        headerBox.getChildren().addAll(title, new Label("   |   "), currentTableLabel, leftStatsWrapper);
+        headerBox.getChildren().addAll(title, new Label("    |    "), currentTableLabel, leftStatsWrapper);
 
-        // ==========================================
-        // 1. أزرار الترابيزات
-        // ==========================================
         HBox tablesBox = new HBox(8);
         tablesBox.setAlignment(Pos.CENTER);
         for (int i = 1; i <= 6; i++) {
@@ -80,9 +85,6 @@ public class Hall {
             tablesBox.getChildren().add(tBtn);
         }
 
-        // ==========================================
-        // 2. أزرار الأقسام (مشاريب، شيشة، أكل)
-        // ==========================================
         TilePane itemsGrid = new TilePane();
         itemsGrid.setHgap(10);
         itemsGrid.setVgap(10);
@@ -111,9 +113,6 @@ public class Hall {
         leftPanel.setAlignment(Pos.CENTER);
         leftPanel.getChildren().addAll(new Label("اختر القسم ثم اضغط على الصنف:"), categoriesBox, itemsGrid);
 
-        // ==========================================
-        // 3. شاشة الأوردر الحالي (يمين)
-        // ==========================================
         orderList = new ListView<>();
         orderList.setPrefWidth(320);
         orderList.setPrefHeight(320);
@@ -142,9 +141,6 @@ public class Hall {
         centerContent.setAlignment(Pos.CENTER);
         centerContent.getChildren().addAll(leftPanel, rightPanel);
 
-        // ==========================================
-        // 4. أزرار العمليات (مسح، تأكيد بدون طباعة، طباعة، رجوع)
-        // ==========================================
         totalLabel = new Label("الإجمالي: 0.0 جنيه");
         totalLabel.setStyle("-fx-font-size:18px; -fx-font-weight: bold; -fx-text-fill: #2e7d32;");
 
@@ -152,14 +148,13 @@ public class Hall {
         clearOrderBtn.setStyle("-fx-background-color: #d9534f; -fx-text-fill: white;");
         clearOrderBtn.setOnAction(e -> clearOrder());
 
-        // زرار تأكيد الطلب من غير طباعة
-        Button confirmOrderBtn = new Button("تأكيد الطلب ✓");
+        Button confirmOrderBtn = new Button("تأكيد بدون طباعة ✓");
         confirmOrderBtn.setStyle("-fx-background-color: #f0ad4e; -fx-text-fill: white; -fx-font-weight: bold;");
         confirmOrderBtn.setOnAction(e -> confirmOrderWithoutPrint());
 
-        Button printInvoiceBtn = new Button("طباعة الفاتورة 🖨️");
+        Button printInvoiceBtn = new Button("طباعة الفواتير والبونات 🖨️");
         printInvoiceBtn.setStyle("-fx-background-color: #5bc0de; -fx-text-fill: white; -fx-font-weight: bold;");
-        printInvoiceBtn.setOnAction(e -> printInvoice());
+        printInvoiceBtn.setOnAction(e -> processAndPrintAll());
 
         Button backBtn = new Button("رجوع");
         backBtn.setOnAction(e -> {
@@ -210,7 +205,6 @@ public class Hall {
             itemBtn.setPrefSize(130, 65);
             itemBtn.setStyle("-fx-background-color: #ffffff; -fx-border-color: #cccccc; -fx-font-weight: bold; -fx-cursor: hand;");
             
-            // تحديد القسم لنعرف هل هو مشروب أم لا عند الإضافة
             String itemType = category; 
             itemBtn.setOnAction(e -> addItemToOrder(name, price, 1, itemType));
             
@@ -236,8 +230,6 @@ public class Hall {
         }
 
         total += price * qtyToAdd;
-        
-        // إذا كان الصنف من قسم المشاريب، نزوده في عداد إجمالي المشاريب
         if (category.equals("drinks")) {
             drinksTotalAmount += price * qtyToAdd;
         }
@@ -254,9 +246,7 @@ public class Hall {
         String name = parts[0];
         double price = Double.parseDouble(parts[1].split(" ")[0]);
         
-        // معرفة القسم من النص المخزن
         boolean isDrink = line.contains("[drinks]");
-
         int currentQty = extractQuantity(line);
         int newQty = currentQty + delta;
 
@@ -296,24 +286,101 @@ public class Hall {
         updateLabels();
     }
 
-    // زرار تأكيد الطلب (بدون طباعة): يحسب المبلغ في الدخل اليومي ويفرغ الأوردر
+    // دالة مساعدة لتوزيع المبالغ على الأقسام بدقة عند التأكيد أو الطباعة
+    private void addOrderTotalsToDailyIncome() {
+        for (String itemLine : orderList.getItems()) {
+            double lineTotal = extractLineTotal(itemLine);
+            dailyTotalIncome += lineTotal;
+
+            if (itemLine.contains("[drinks]")) {
+                dailyDrinksIncome += lineTotal;
+            } else if (itemLine.contains("[shisha]")) {
+                dailyShishaIncome += lineTotal;
+            } else if (itemLine.contains("[food]")) {
+                dailyFoodIncome += lineTotal;
+            }
+        }
+    }
+
     private void confirmOrderWithoutPrint() {
         if(orderList.getItems().isEmpty()) {
             showAlert("تنبيه", "الأوردر فارغ!");
             return;
         }
-        dailyTotalIncome += total; // إضافة إجمالي الأوردر للدخل اليومي
+        addOrderTotalsToDailyIncome();
         showAlert("تم التأكيد", "تم تسجيل وتأكيد الطلب لـ (" + selectedTable + ") بنجاح!");
         clearOrder();
     }
 
-    private void printInvoice() {
+    private void processAndPrintAll() {
         if(orderList.getItems().isEmpty()) {
-            showAlert("تنبيه", "الأوردر فارغ ولا يمكن طباعة فاتورة!");
+            showAlert("تنبيه", "الأوردر فارغ ولا يمكن طباعة فواتير!");
             return;
         }
-        dailyTotalIncome += total; // الطباعة تعتبر تأكيد ودفع أيضاً
-        showAlert("تمت الطباعة", "تم إرسال الفاتورة لـ (" + selectedTable + ") إلى الطابعة وتسجيل الدخل!");
+
+        int currentOrderNo = orderCounter++;
+        String dateTime = LocalDateTime.now().format(DateTimeFormatter.ofPattern("dd/MM/yyyy hh:mm a"));
+
+        StringBuilder cashierReceipt = new StringBuilder();
+        cashierReceipt.append("==========================\n");
+        cashierReceipt.append("      CAFE SYSTEM\n");
+        cashierReceipt.append("Order #").append(currentOrderNo).append("\n");
+        cashierReceipt.append("Table : ").append(selectedTable).append("\n");
+        cashierReceipt.append("Date : ").append(dateTime).append("\n");
+        cashierReceipt.append("==========================\n\n");
+        cashierReceipt.append(String.format("%-5s %-12s %-6s %-6s\n", "Qty", "Item", "Price", "Total"));
+        cashierReceipt.append("-----------------------------------\n");
+
+        StringBuilder barTicket = new StringBuilder("===== BAR (Drinks) =====\nTable : " + selectedTable + "\nOrder #" + currentOrderNo + "\n\n");
+        StringBuilder kitchenTicket = new StringBuilder("===== KITCHEN (Food) =====\nTable : " + selectedTable + "\nOrder #" + currentOrderNo + "\n\n");
+        StringBuilder shishaTicket = new StringBuilder("===== SHISHA =====\nTable : " + selectedTable + "\nOrder #" + currentOrderNo + "\n\n");
+
+        boolean hasDrinks = false;
+        boolean hasFood = false;
+        boolean hasShisha = false;
+
+        for (String itemLine : orderList.getItems()) {
+            String[] parts = itemLine.split(" - ");
+            String name = parts[0];
+            double price = Double.parseDouble(parts[1].split(" ")[0]);
+            int qty = extractQuantity(itemLine);
+            double lineTotal = price * qty;
+
+            cashierReceipt.append(String.format("%-5d %-12s %-6.0f %-6.0f\n", qty, name, price, lineTotal));
+
+            if (itemLine.contains("[drinks]")) {
+                barTicket.append(qty).append(" ").append(name).append("\n");
+                hasDrinks = true;
+            } else if (itemLine.contains("[food]")) {
+                kitchenTicket.append(qty).append(" ").append(name).append("\n");
+                hasFood = true;
+            } else if (itemLine.contains("[shisha]")) {
+                shishaTicket.append(qty).append(" ").append(name).append("\n");
+                hasShisha = true;
+            }
+        }
+
+        cashierReceipt.append("\n-----------------------------------\n");
+        cashierReceipt.append(String.format("TOTAL : %.0f EGP\n", total));
+        cashierReceipt.append("-----------------------------------\n");
+        cashierReceipt.append("Cashier : Ahmed\n");
+        cashierReceipt.append("Thank You\n");
+        cashierReceipt.append("==========================\n\n\n");
+
+        printToPrinter("CashierPrinter", cashierReceipt.toString());
+
+        if (hasDrinks) {
+            printToPrinter("BarPrinter", barTicket.toString());
+        }
+        if (hasFood) {
+            printToPrinter("KitchenPrinter", kitchenTicket.toString());
+        }
+        if (hasShisha) {
+            printToPrinter("ShishaPrinter", shishaTicket.toString());
+        }
+
+        addOrderTotalsToDailyIncome();
+        showAlert("تمت الطباعة", "تم إصدار الفاتورة وتوزيع البونات على الأقسام بنجاح!");
         clearOrder();
     }
 
@@ -354,5 +421,52 @@ public class Hall {
 
     public VBox getView(){
         return root;
+    }
+
+    // دوال لجلب الإيرادات ليراها كلاس الحسابات اليومية
+    public static double getDailyTotalIncome() {
+        return dailyTotalIncome;
+    }
+
+    public static double getDailyDrinksIncome() {
+        return dailyDrinksIncome;
+    }
+
+    public static double getDailyShishaIncome() {
+        return dailyShishaIncome;
+    }
+
+    public static double getDailyFoodIncome() {
+        return dailyFoodIncome;
+    }
+
+    private void printToPrinter(String printerNameIdentifier, String textContent) {
+        try {
+            PrintService[] printServices = PrintServiceLookup.lookupPrintServices(null, null);
+            PrintService selectedService = null;
+
+            for (PrintService service : printServices) {
+                if (service.getName().equalsIgnoreCase(printerNameIdentifier)) {
+                    selectedService = service;
+                    break;
+                }
+            }
+
+            if (selectedService == null) {
+                selectedService = PrintServiceLookup.lookupDefaultPrintService();
+            }
+
+            if (selectedService != null) {
+                DocPrintJob printJob = selectedService.createPrintJob();
+                byte[] bytes = textContent.getBytes("CP1256"); 
+                Doc doc = new SimpleDoc(bytes, DocFlavor.BYTE_ARRAY.AUTOSENSE, null);
+                PrintRequestAttributeSet attributes = new HashPrintRequestAttributeSet();
+                printJob.print(doc, attributes);
+            } else {
+                System.out.println("تحذير: لا توجد أي طابعة متصلة أو معرفة على الجهاز!");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }
