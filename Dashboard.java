@@ -23,7 +23,7 @@ public class Dashboard {
                 "-fx-background-color:#f5f5f5;"
         );
 
-        Label title = new Label("Cafe Dashboard");
+        Label title = new Label("كافيه زردة - لوحة التحكم");
         title.setStyle(
                 "-fx-font-size:26px;" +
                 "-fx-text-fill:#8B5E3C;" +
@@ -50,7 +50,7 @@ public class Dashboard {
         Button monthlyAccountsBtn = new Button("الحسابات الشهرية");
         styleDashboardButton(monthlyAccountsBtn, "#f0ad4e");
 
-        // ربط الأزرار بالانتقال للشاشات المطلوبة
+        // ربط زر الصالة
         hallBtn.setOnAction(e -> {
             Hall hall = new Hall(stage);
             stage.setScene(
@@ -62,6 +62,7 @@ public class Dashboard {
             );
         });
 
+        // ربط زر المخزن
         storeBtn.setOnAction(e -> {
             Store store = new Store(stage);
             stage.setScene(
@@ -73,18 +74,40 @@ public class Dashboard {
             );
         });
 
-        // الأحداث الخاصة بالأزرار الجديدة (يمكن ربطها بشاشات أو نوافذ خاصة بها لاحقاً)
+        // ربط زر حسابات الموظفين
         employeesBtn.setOnAction(e -> {
-            // Placeholder للشاشة أو الوظيفة المستقبلية لحسابات الموظفين
-            showAlert("حسابات الموظفين", "سيتم فتح شاشة إدارة الرواتب والسلف والجزاءات للموظفين.");
+            EmployeesAccounts emp = new EmployeesAccounts(stage);
+            stage.setScene(
+                    new javafx.scene.Scene(
+                            emp.getView(),
+                            900,
+                            600
+                    )
+            );
         });
 
+        // ربط زر الحسابات اليومية
         dailyAccountsBtn.setOnAction(e -> {
-            showAlert("الحسابات اليومية", "عرض تفاصيل الإيرادات والمصروفات اليومية وصافي الدخل.");
+            DailyAccounts daily = new DailyAccounts(stage);
+            stage.setScene(
+                    new javafx.scene.Scene(
+                            daily.getView(),
+                            900,
+                            600
+                    )
+            );
         });
 
+        // ربط زر الحسابات الشهرية
         monthlyAccountsBtn.setOnAction(e -> {
-            showAlert("الحسابات الشهرية", "عرض التقارير المالية الشهرية الشاملة للأرباح والخسائر.");
+            MonthlyAccounts monthly = new MonthlyAccounts(stage);
+            stage.setScene(
+                    new javafx.scene.Scene(
+                            monthly.getView(),
+                            900,
+                            600
+                    )
+            );
         });
 
         root.getChildren().addAll(
@@ -108,15 +131,6 @@ public class Dashboard {
                 "-fx-font-weight: bold;" +
                 "-fx-cursor: hand;"
         );
-    }
-
-    // دالة مساعدة لعرض التنبيهات عند الضغط على الأزرار الجديدة
-    private void showAlert(String title, String message) {
-        javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION);
-        alert.setTitle(title);
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
     }
 
     public VBox getView(){
